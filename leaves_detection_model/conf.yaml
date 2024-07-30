@@ -4,12 +4,13 @@ train: images/train
 val: images/val
 
 # Classes
+# names:
+#   0: esca
+#   1: healthy
+#   2: pvl_esca
+#   3: pvl_healthy
+#   4: pvl_unknown
+#   5: unknown
 names:
-  0: esca
-  1: healthy
-  2: pvl_esca
-  3: pvl_healthy
-  4: pvl_unknown
-  5: unknown
-
+  0: healthy
 

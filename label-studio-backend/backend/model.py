@@ -4,6 +4,14 @@ from label_studio_ml.model import LabelStudioMLBase
 from label_studio_ml.response import ModelResponse
 from ultralyticsplus import YOLO
 
+
+
+from ultralyticsplus import YOLO, render_result
+
+from torchvision.ops import nms
+
+from patchify_utils import patchify_image,display_image,PatchMatrix
+
 """
 <View>
   <Image name='image' value='$image' zoom='true' zoomControl='true' rotateControl='true'/> 
@@ -18,7 +26,7 @@ from ultralyticsplus import YOLO
 </View>
 """
 
-MODEL_FILE_NAME = "best_multiclass.pt"
+MODEL_FILE_NAME = "best.pt"
 
 class NewModel(LabelStudioMLBase):
     """Custom ML Backend model
@@ -82,39 +90,89 @@ class NewModel(LabelStudioMLBase):
 
         return predictions
 
+    # #simple prediction
+    # def predict_one_task(self, task: Dict):
+       
+    #     path = self.get_local_path(task["data"]["image"], task_id=task["id"])
+    #     print(f"\nTASK:\n{task}\n")
+    #     model_results = self.model.predict(path)
+    #     print(f"\nRESULT:\n{model_results}\n")
+    #     results = []
+    #     all_scores = []
+
+
+    #     for i,row in enumerate(model_results[0].boxes.xyxyn):
+    #         label=model_results[0].names[int(model_results[0].boxes.cls[i].item())]
+    #         score = float(model_results[0].boxes.conf[i].item())
+    #         results.append(
+    #           {
+    #               "from_name": "label",
+    #               "source": "$image",
+    #               "to_name": "image",
+    #               "type": "rectanglelabels",
+    #               "value": {
+    #                   "height": (row[3].item() - row[1].item()) * 100,
+    #                   "rectanglelabels": [label],
+    #                   "rotation": 0,
+    #                   "width": (row[2].item() - row[0].item()) * 100,
+    #                   "x": row[0].item() * 100,
+    #                   "y": row[1].item() * 100,
+    #               },
+    #               "score": score
+    #           }
+    #         )
+
+    #         all_scores.append(score)
+
+    #         i += 1
+
+    #     avg_score = sum(all_scores) / max(len(all_scores), 1)
+
+    #     return {"result": results, "score": avg_score, "model_version": self.get("model_version")}
+
+    #pathicy prediction prediction
+    def convert_bbox_format(self,x1, y1, x2, y2):
+        width = x2 - x1
+        height = y2 - y1
+        x_center = x1 + width / 2
+        y_center = y1 + height / 2
+        return width, height, x_center, y_center
+
     def predict_one_task(self, task: Dict):
         path = self.get_local_path(task["data"]["image"], task_id=task["id"])
-
-        model_results = self.model.predict(path)
-        print(model_results)
+        pm = PatchMatrix(self.model, path, (2000, 2000), (1000, 1000))
+        print(f"\nTASK:\n{task}\n")
+        model_results = {"model_version": self.get("model_result")}
+        _, model_out = pm.merge_patches_and_boxes()  # self.model.predict(path)
+        print(f"\nRESULT:\n{model_results}\n")
         results = []
         all_scores = []
 
+        for i, row in enumerate(model_out):
+            label = row[2]
+            score = row[3]
+            x1, y1, x2, y2 = tuple(row[0])
+            width, height, x_center, y_center = self.convert_bbox_format(x1, y1, x2, y2)
 
-        for i,row in enumerate(model_results[0].boxes.xyxyn):
-            label=model_results[0].names[int(model_results[0].boxes.cls[i].item())]
-            score = float(model_results[0].boxes.conf[i].item())
             results.append(
-              {
-                  "from_name": "label",
-                  "source": "$image",
-                  "to_name": "image",
-                  "type": "rectanglelabels",
-                  "value": {
-                      "height": (row[3].item() - row[1].item()) * 100,
-                      "rectanglelabels": [label],
-                      "rotation": 0,
-                      "width": (row[2].item() - row[0].item()) * 100,
-                      "x": row[0].item() * 100,
-                      "y": row[1].item() * 100,
-                  },
-                  "score": score
-              }
+                {
+                    "from_name": "label",
+                    "source": "$image",
+                    "to_name": "image",
+                    "type": "rectanglelabels",
+                    "value": {
+                        "height": height,
+                        "rectanglelabels": [label],
+                        "rotation": 0,
+                        "width": width,
+                        "x": x_center,
+                        "y": y_center,
+                    },
+                    "score": score,
+                }
             )
 
             all_scores.append(score)
-
-            i += 1
 
         avg_score = sum(all_scores) / max(len(all_scores), 1)
 
