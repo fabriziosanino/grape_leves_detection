@@ -133,16 +133,15 @@ class NewModel(LabelStudioMLBase):
 
     #pathicy prediction prediction
     def convert_bbox_format(self, x1, y1, x2, y2, img_height, img_width):
-        width = (x2 - x1) / img_width *100
-        height = (y2 - y1) / img_height *100 
-        x_center = (x1 ) / img_width  *100
-        y_center = (y1 ) / img_height * 100
+        width = (x2 - x1) / img_width * 100
+        height = (y2 - y1) / img_height * 100
+        x_center = (x1) / img_width * 100
+        y_center = (y1) / img_height * 100
         return width, height, x_center, y_center
 
     def predict_one_task(self, task: Dict):
         # Path or image
         path = self.get_local_path(task["data"]["image"], task_id=task["id"])
-       
 
         # Parameters for patchification
         patch_size = (2000, 2000)  # Patch size as needed
@@ -157,23 +156,16 @@ class NewModel(LabelStudioMLBase):
         model_results = {"model_version": self.get("model_result")}
 
         # Merge patches and get bounding boxes
-        full_image, model_out,img_height,img_width,x_offset,y_offset = pm.merge_patches_and_boxes(iou_threshold=0.5, combine_approach="nms")
-        print(f"OFFSET X: {x_offset}  OFFSET Y: {y_offset} FULL IMAGE {full_image.size}")
+        full_image, model_out, img_height, img_width = pm.merge_patches_and_boxes(iou_threshold=0.5, combine_approach="nms")
+
         results = []
         all_scores = []
 
-        # Get the dimensions of the full stitched image
-        #img_height, img_width = full_image.size
-        img_height=img_height
-        img_width=img_width
         for i, row in enumerate(model_out):
             label = row[2]
             score = row[3]
             x1, y1, x2, y2 = tuple(row[0])
-            if x_offset>0:
-                img_width=x_offset
-            if y_offset>0:
-                img_height=y_offset
+
             # Convert bounding box coordinates to normalized format
             width, height, x_center, y_center = self.convert_bbox_format(x1, y1, x2, y2, img_height, img_width)
             

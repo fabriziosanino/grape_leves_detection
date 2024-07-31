@@ -10,9 +10,38 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+
+
 from PIL import Image
 import matplotlib.patches as mpatches
 
+
+from PIL import Image
+
+def detect_black_borders(image):
+    """
+    Detect the width and height of black borders in an image.
+    :param image: Input image (numpy array).
+    :return: (top_border, bottom_border, left_border, right_border)
+    """
+    gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
+    _, binary = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY)
+    
+    # Find contours
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if contours:
+        # Get the bounding box of the largest contour
+        x, y, w, h = cv2.boundingRect(contours[0])
+        
+        top_border = y
+        bottom_border = image.height - (y + h)
+        left_border = x
+        right_border = image.width - (x + w)
+        
+        return top_border, bottom_border, left_border, right_border
+    else:
+        return 0, 0, 0, 0
 
 class PatchDetection:
     def __init__(self, x, y, res, img,model):
@@ -135,17 +164,36 @@ class PatchMatrix:
                     ]
                     all_boxes.append((adjusted_box, int(box.cls.cpu()), self.class_map[int(box.cls.cpu())], float(box.conf.cpu())))
 
+        # Detect black borders on the full stitched image
+        top_border, bottom_border, left_border, right_border = detect_black_borders(full_image)
+
+        # Adjust full image dimensions by removing black borders
+        adjusted_full_height = full_height - top_border - bottom_border
+        adjusted_full_width = full_width - left_border - right_border
+
+        # Adjust bounding boxes to exclude black borders
+        adjusted_boxes = []
+        for box, class_id, label, conf in all_boxes:
+            x_min, y_min, x_max, y_max = box
+            x_min = max(x_min - left_border, 0)
+            y_min = max(y_min - top_border, 0)
+            x_max = min(x_max - left_border, adjusted_full_width)
+            y_max = min(y_max - top_border, adjusted_full_height)
+
+            if x_min < x_max and y_min < y_max:
+                adjusted_boxes.append(([x_min, y_min, x_max, y_max], class_id, label, conf))
+
         # Apply NMS or other combination approaches
         if iou_threshold >= 0:
             if combine_approach == "nms":
-                all_boxes = self.nms(all_boxes, iou_threshold)
+                adjusted_boxes = self.nms(adjusted_boxes, iou_threshold)
             elif combine_approach == "merge":
-                all_boxes = self.merge_boxes(all_boxes, iou_threshold)
+                adjusted_boxes = self.merge_boxes(adjusted_boxes, iou_threshold)
             else:
-                all_boxes = self.merge_boxes(all_boxes, iou_threshold)
-                all_boxes = self.nms(all_boxes, iou_threshold)
+                adjusted_boxes = self.merge_boxes(adjusted_boxes, iou_threshold)
+                adjusted_boxes = self.nms(adjusted_boxes, iou_threshold)
 
-        return full_image, all_boxes,full_height,full_width,x_offset,y_offset
+        return full_image.crop((left_border, top_border, full_width - right_border, full_height - bottom_border)), adjusted_boxes, adjusted_full_height, adjusted_full_width
     
     def nms(self,boxes,iou_threshold=0.5):
         boxes_cord = np.array([box[0] for box in boxes])
@@ -219,7 +267,7 @@ class PatchMatrix:
         - box_line_width: Integer specifying the line width of the bounding boxes.
         """
 
-        image, boxes=self.merge_patches_and_boxes(iou_threshold,combine_approach)
+        image, boxes,_,_=self.merge_patches_and_boxes(iou_threshold,combine_approach)
         fig, ax = plt.subplots(1, figsize=figsize)
         ax.imshow(image)
 
