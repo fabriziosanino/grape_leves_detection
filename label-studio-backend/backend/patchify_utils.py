@@ -145,7 +145,7 @@ class PatchMatrix:
                 all_boxes = self.merge_boxes(all_boxes, iou_threshold)
                 all_boxes = self.nms(all_boxes, iou_threshold)
 
-        return full_image, all_boxes
+        return full_image, all_boxes,full_height,full_width,x_offset,y_offset
     
     def nms(self,boxes,iou_threshold=0.5):
         boxes_cord = np.array([box[0] for box in boxes])
